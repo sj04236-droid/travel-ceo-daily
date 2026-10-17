@@ -1,0 +1,38 @@
+name: daily-report-notify
+
+# reports/ 에 새 보고서가 올라오면 같은 내용으로 이슈를 열어 알림 메일을 보낸다
+on:
+  push:
+    branches: [main]
+    paths: ["reports/**.md"]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Open issue for new report
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const fs = require('fs');
+            const files = execSync('git diff --name-only --diff-filter=A HEAD~1 HEAD -- reports/')
+              .toString().trim().split('\n').filter(f => f.endsWith('.md'));
+            for (const f of files) {
+              const body = fs.readFileSync(f, 'utf8');
+              const date = f.replace('reports/', '').replace('.md', '');
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `오늘 할 일 — ${date}`,
+                body: body + `\n\n---\n📄 [${f}](../blob/main/${encodeURI(f)})`,
+                assignees: [context.repo.owner],
+              });
+            }
